@@ -19,10 +19,8 @@ type SearchResult struct {
 }
 
 func SearchStock(keyword string) ([]SearchResult, error) {
-	u := fmt.Sprintf(
-		"https://searchapi.eastmoney.com/api/suggest/get?input=%s&type=14&token=D43BF722C8E33BDC906FB84D85E326E8&count=10",
-		url.QueryEscape(keyword),
-	)
+	u := fmt.Sprintf("%s?input=%s&type=14&token=D43BF722C8E33BDC906FB84D85E326E8&count=10",
+		baseSearch, url.QueryEscape(keyword))
 	body, err := DoGet(u)
 	if err != nil {
 		return nil, err
@@ -82,26 +80,14 @@ type Quote struct {
 }
 
 func GetQuote(code string) (*Quote, error) {
-	u := fmt.Sprintf(
-		"https://push2.eastmoney.com/api/qt/stock/get?secid=%s&fields=f43,f44,f45,f46,f47,f48,f50,f51,f52,f55,f57,f58,f60,f71,f116,f117,f162,f167,f168,f169,f170",
-		ToSecID(code),
-	)
-	body, err := DoGet(u)
+	m, err := Push2StockGet("stock/get", ToSecID(code),
+		"f43,f44,f45,f46,f47,f48,f50,f51,f52,f55,f57,f58,f60,f71,f116,f117,f162,f167,f168,f169,f170")
 	if err != nil {
 		return nil, err
 	}
-
-	var raw struct {
-		Data map[string]json.RawMessage `json:"data"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-	if raw.Data == nil {
+	if m == nil {
 		return nil, fmt.Errorf("stock %s not found", code)
 	}
-
-	m := raw.Data
 	div := func(key string) float64 { return GetFloat(m, key) / 1000 }
 
 	return &Quote{
@@ -151,26 +137,18 @@ func GetKLine(code, period string, limit int) ([]KLine, error) {
 		limit = 30
 	}
 
-	u := fmt.Sprintf(
-		"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=%s&klt=%s&fqt=1&beg=0&end=20500101&lmt=%d&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-		ToSecID(code), klt, limit,
-	)
-	body, err := DoGet(u)
+	lines, err := Push2HisGet(Push2HisQuery{
+		Path:  "stock/kline/get",
+		SecID: ToSecID(code),
+		Params: fmt.Sprintf("klt=%s&fqt=1&beg=0&end=20500101&lmt=%d&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+			klt, limit),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Data struct {
-			Klines []string `json:"klines"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var klines []KLine
-	for _, line := range raw.Data.Klines {
+	for _, line := range lines {
 		parts := strings.Split(line, ",")
 		if len(parts) < 11 {
 			continue
@@ -212,26 +190,15 @@ func GetIndexQuotes() ([]IndexQuote, error) {
 		"0.399673",
 	}
 
-	u := fmt.Sprintf(
-		"https://push2.eastmoney.com/api/qt/ulist/get?secids=%s&fields=f2,f3,f4,f5,f6,f12,f14,f104,f105",
-		strings.Join(codes, ","),
-	)
-	body, err := DoGet(u)
+	diff, err := Push2DiffGet("ulist/get",
+		"secids="+strings.Join(codes, ","),
+		"f2,f3,f4,f5,f6,f12,f14,f104,f105")
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Data struct {
-			Diff []map[string]json.RawMessage `json:"diff"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var indexes []IndexQuote
-	for _, m := range raw.Data.Diff {
+	for _, m := range diff {
 		indexes = append(indexes, IndexQuote{
 			Code:      GetStr(m, "f12"),
 			Name:      GetStr(m, "f14"),

@@ -1,9 +1,7 @@
 package eastmoney
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 )
 
@@ -29,26 +27,14 @@ type MoneyFlow struct {
 }
 
 func GetMoneyFlow(code string) (*MoneyFlow, error) {
-	u := fmt.Sprintf(
-		"https://push2.eastmoney.com/api/qt/stock/fflow/current?secid=%s&fields=f1,f2,f3,f62,f63,f64,f65,f66,f67,f68,f69,f70,f71,f72,f73,f74,f75,f76,f77,f78,f79,f80,f81,f82,f83,f84,f85,f86",
-		ToSecID(code),
-	)
-	body, err := DoGet(u)
+	m, err := Push2StockGet("stock/fflow/current", ToSecID(code),
+		"f1,f2,f3,f62,f63,f64,f65,f66,f67,f68,f69,f70,f71,f72,f73,f74,f75,f76,f77,f78,f79,f80,f81,f82,f83,f84,f85,f86")
 	if err != nil {
 		return nil, err
 	}
-
-	var raw struct {
-		Data map[string]json.RawMessage `json:"data"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-	if raw.Data == nil {
+	if m == nil {
 		return nil, fmt.Errorf("no money flow data for %s", code)
 	}
-
-	m := raw.Data
 	return &MoneyFlow{
 		Code:       GetStr(m, "f57"),
 		Name:       GetStr(m, "f58"),
@@ -84,26 +70,18 @@ func GetMoneyFlowHistory(code string, limit int) ([]MoneyFlowDay, error) {
 	if limit <= 0 || limit > 60 {
 		limit = 10
 	}
-	u := fmt.Sprintf(
-		"https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get?secid=%s&lmt=%d&klt=101&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65",
-		ToSecID(code), limit,
-	)
-	body, err := DoGet(u)
+	lines, err := Push2HisGet(Push2HisQuery{
+		Path:  "stock/fflow/daykline/get",
+		SecID: ToSecID(code),
+		Params: fmt.Sprintf("lmt=%d&klt=101&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65",
+			limit),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Data struct {
-			Klines []string `json:"klines"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var days []MoneyFlowDay
-	for _, line := range raw.Data.Klines {
+	for _, line := range lines {
 		parts := strings.Split(line, ",")
 		if len(parts) < 6 {
 			continue
@@ -137,26 +115,18 @@ func GetNorthFlow(limit int) ([]NorthFlow, error) {
 	if limit <= 0 || limit > 60 {
 		limit = 10
 	}
-	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=TRADE_DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPT_MUTUAL_DEAL_HISTORY&columns=ALL&filter=",
-		limit,
-	)
-	body, err := DoGet(u)
+	data, err := DatacenterGet(DatacenterQuery{
+		ReportName:  "RPT_MUTUAL_DEAL_HISTORY",
+		SortColumns: "TRADE_DATE",
+		SortTypes:   "-1",
+		PageSize:    limit,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Result struct {
-			Data []map[string]any `json:"data"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var flows []NorthFlow
-	for _, d := range raw.Result.Data {
+	for _, d := range data {
 		sh := ToFloat(d["MUTUAL_A_DEAL_FIN"])
 		sz := ToFloat(d["MUTUAL_D_DEAL_FIN"])
 		flows = append(flows, NorthFlow{
@@ -192,26 +162,20 @@ func GetNorthHoldings(market string, limit int) ([]NorthHolding, error) {
 	if market == "sz" {
 		filter = `(MUTUAL_TYPE="003")`
 	}
-	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=HOLD_MARKET_CAP&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPT_MUTUAL_HOLDSTOCKNORTH_STA&columns=ALL&source=WEB&client=WEB&filter=%s",
-		limit, url.QueryEscape(filter),
-	)
-	body, err := DoGet(u)
+	data, err := DatacenterGet(DatacenterQuery{
+		ReportName:  "RPT_MUTUAL_HOLDSTOCKNORTH_STA",
+		SortColumns: "HOLD_MARKET_CAP",
+		SortTypes:   "-1",
+		PageSize:    limit,
+		Filter:      filter,
+		Extra:       "source=WEB&client=WEB",
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Result struct {
-			Data []map[string]any `json:"data"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var holdings []NorthHolding
-	for _, d := range raw.Result.Data {
+	for _, d := range data {
 		holdings = append(holdings, NorthHolding{
 			Code:       ToStr(d["SECURITY_CODE"]),
 			Name:       ToStr(d["SECURITY_NAME"]),
@@ -241,26 +205,19 @@ func GetMarginData(limit int) ([]MarginData, error) {
 	if limit <= 0 || limit > 60 {
 		limit = 10
 	}
-	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=STATISTICS_DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPTA_WEB_MARGIN_DAILYTRADE&columns=STATISTICS_DATE,FIN_BUY_AMT,FIN_BALANCE,LOAN_SELL_AMT,LOAN_BALANCE,MARGIN_BALANCE",
-		limit,
-	)
-	body, err := DoGet(u)
+	data, err := DatacenterGet(DatacenterQuery{
+		ReportName:  "RPTA_WEB_MARGIN_DAILYTRADE",
+		Columns:     "STATISTICS_DATE,FIN_BUY_AMT,FIN_BALANCE,LOAN_SELL_AMT,LOAN_BALANCE,MARGIN_BALANCE",
+		SortColumns: "STATISTICS_DATE",
+		SortTypes:   "-1",
+		PageSize:    limit,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Result struct {
-			Data []map[string]any `json:"data"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var items []MarginData
-	for _, d := range raw.Result.Data {
+	for _, d := range data {
 		items = append(items, MarginData{
 			Date:       ToStr(d["STATISTICS_DATE"]),
 			FinBuy:     ToFloat(d["FIN_BUY_AMT"]),
@@ -291,27 +248,19 @@ func GetStockMargin(code string, limit int) ([]StockMargin, error) {
 	if limit <= 0 || limit > 30 {
 		limit = 10
 	}
-	filter := fmt.Sprintf(`(SCODE="%s")`, code)
-	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPTA_WEB_RZRQ_GGMX&columns=ALL&filter=%s",
-		limit, url.QueryEscape(filter),
-	)
-	body, err := DoGet(u)
+	data, err := DatacenterGet(DatacenterQuery{
+		ReportName:  "RPTA_WEB_RZRQ_GGMX",
+		SortColumns: "DATE",
+		SortTypes:   "-1",
+		PageSize:    limit,
+		Filter:      fmt.Sprintf(`(SCODE="%s")`, code),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Result struct {
-			Data []map[string]any `json:"data"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var items []StockMargin
-	for _, d := range raw.Result.Data {
+	for _, d := range data {
 		items = append(items, StockMargin{
 			Date:       ToStr(d["DATE"]),
 			Code:       ToStr(d["SCODE"]),

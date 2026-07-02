@@ -23,8 +23,8 @@ func GetStockNews(code string, limit int) ([]StockNews, error) {
 		limit = 10
 	}
 	u := fmt.Sprintf(
-		"https://search-api-web.eastmoney.com/search/jsonp?cb=&param=%%7B%%22uid%%22:%%22%%22,%%22keyword%%22:%%22%s%%22,%%22type%%22:%%5B%%22cmsArticleWebOld%%22%%5D,%%22client%%22:%%22web%%22,%%22clientType%%22:%%22web%%22,%%22clientVersion%%22:%%22curr%%22,%%22param%%22:%%7B%%22cmsArticleWebOld%%22:%%7B%%22searchScope%%22:%%22default%%22,%%22sort%%22:%%22default%%22,%%22pageIndex%%22:1,%%22pageSize%%22:%d,%%22preTag%%22:%%22%%22,%%22postTag%%22:%%22%%22%%7D%%7D%%7D",
-		code, limit,
+		"%s?cb=&param=%%7B%%22uid%%22:%%22%%22,%%22keyword%%22:%%22%s%%22,%%22type%%22:%%5B%%22cmsArticleWebOld%%22%%5D,%%22client%%22:%%22web%%22,%%22clientType%%22:%%22web%%22,%%22clientVersion%%22:%%22curr%%22,%%22param%%22:%%7B%%22cmsArticleWebOld%%22:%%7B%%22searchScope%%22:%%22default%%22,%%22sort%%22:%%22default%%22,%%22pageIndex%%22:1,%%22pageSize%%22:%d,%%22preTag%%22:%%22%%22,%%22postTag%%22:%%22%%22%%7D%%7D%%7D",
+		baseNews, code, limit,
 	)
 	body, err := DoGet(u)
 	if err != nil {

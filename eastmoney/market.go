@@ -3,7 +3,6 @@ package eastmoney
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"time"
 )
 
@@ -30,26 +29,17 @@ func GetSectors(sectorType string, limit int) ([]Sector, error) {
 		limit = 20
 	}
 
-	u := fmt.Sprintf(
-		"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=%d&po=1&np=1&fltt=2&invt=2&fs=%s&fields=f2,f3,f4,f12,f14,f128,f136,f140,f141,f62",
-		limit, url.QueryEscape(fs),
-	)
-	body, err := DoGet(u)
+	diff, err := ClistGet(ClistQuery{
+		FS:     fs,
+		Fields: "f2,f3,f4,f12,f14,f128,f136,f140,f141,f62",
+		Limit:  limit,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Data struct {
-			Diff []map[string]json.RawMessage `json:"diff"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var sectors []Sector
-	for _, m := range raw.Data.Diff {
+	for _, m := range diff {
 		sectors = append(sectors, Sector{
 			Code:       GetStr(m, "f12"),
 			Name:       GetStr(m, "f14"),
@@ -81,28 +71,18 @@ func GetSectorStocks(sectorCode string, limit int) ([]SectorStock, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
-	fs := fmt.Sprintf("b:%s+f:!50", sectorCode)
 
-	u := fmt.Sprintf(
-		"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=%d&po=1&np=1&fltt=2&invt=2&fs=%s&fields=f2,f3,f4,f5,f6,f12,f14,f62",
-		limit, url.QueryEscape(fs),
-	)
-	body, err := DoGet(u)
+	diff, err := ClistGet(ClistQuery{
+		FS:     fmt.Sprintf("b:%s+f:!50", sectorCode),
+		Fields: "f2,f3,f4,f5,f6,f12,f14,f62",
+		Limit:  limit,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Data struct {
-			Diff []map[string]json.RawMessage `json:"diff"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var stocks []SectorStock
-	for _, m := range raw.Data.Diff {
+	for _, m := range diff {
 		stocks = append(stocks, SectorStock{
 			Code:      GetStr(m, "f12"),
 			Name:      GetStr(m, "f14"),
@@ -147,27 +127,19 @@ func GetRanking(rankType string, limit int) ([]RankStock, error) {
 		sortField = "f8"
 	}
 
-	fs := "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23+f:!50"
-	u := fmt.Sprintf(
-		"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=%d&po=%s&np=1&fltt=2&invt=2&fid=%s&fs=%s&fields=f2,f3,f4,f5,f6,f8,f9,f12,f14,f20",
-		limit, po, sortField, url.QueryEscape(fs),
-	)
-	body, err := DoGet(u)
+	diff, err := ClistGet(ClistQuery{
+		FS:        "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23+f:!50",
+		Fields:    "f2,f3,f4,f5,f6,f8,f9,f12,f14,f20",
+		Limit:     limit,
+		SortField: sortField,
+		SortOrder: po,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Data struct {
-			Diff []map[string]json.RawMessage `json:"diff"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var stocks []RankStock
-	for _, m := range raw.Data.Diff {
+	for _, m := range diff {
 		stocks = append(stocks, RankStock{
 			Code:      GetStr(m, "f12"),
 			Name:      GetStr(m, "f14"),
@@ -213,10 +185,8 @@ func GetLimitStocks(limitType string, limit int) ([]LimitStock, error) {
 		sort = "fund:asc"
 	}
 
-	u := fmt.Sprintf(
-		"https://push2ex.eastmoney.com/%s?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&pagesize=%d&sort=%s&date=%s",
-		endpoint, limit, sort, date,
-	)
+	u := fmt.Sprintf("%s/%s?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&pagesize=%d&sort=%s&date=%s",
+		basePush2Ex, endpoint, limit, sort, date)
 	body, err := DoGet(u)
 	if err != nil {
 		return nil, err
@@ -295,26 +265,18 @@ func GetDragonTiger(limit int) ([]DragonTiger, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
-	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=TRADE_DATE,SECURITY_CODE&sortTypes=-1,1&pageSize=%d&pageNumber=1&reportName=RPT_DAILYBILLBOARD_DETAILSNEW&columns=ALL&filter=",
-		limit,
-	)
-	body, err := DoGet(u)
+	data, err := DatacenterGet(DatacenterQuery{
+		ReportName:  "RPT_DAILYBILLBOARD_DETAILSNEW",
+		SortColumns: "TRADE_DATE,SECURITY_CODE",
+		SortTypes:   "-1,1",
+		PageSize:    limit,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Result struct {
-			Data []map[string]any `json:"data"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var items []DragonTiger
-	for _, d := range raw.Result.Data {
+	for _, d := range data {
 		items = append(items, DragonTiger{
 			Code:      ToStr(d["SECURITY_CODE"]),
 			Name:      ToStr(d["SECURITY_NAME_ABBR"]),
@@ -352,26 +314,19 @@ func GetBlockTrades(limit int) ([]BlockTrade, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
-	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=TRADE_DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPT_DATA_BLOCKTRADE&columns=TRADE_DATE,SECURITY_CODE,SECURITY_NAME_ABBR,DEAL_PRICE,DEAL_VOLUME,DEAL_AMT,PREMIUM_RATIO,BUYER_NAME,SELLER_NAME",
-		limit,
-	)
-	body, err := DoGet(u)
+	data, err := DatacenterGet(DatacenterQuery{
+		ReportName:  "RPT_DATA_BLOCKTRADE",
+		Columns:     "TRADE_DATE,SECURITY_CODE,SECURITY_NAME_ABBR,DEAL_PRICE,DEAL_VOLUME,DEAL_AMT,PREMIUM_RATIO,BUYER_NAME,SELLER_NAME",
+		SortColumns: "TRADE_DATE",
+		SortTypes:   "-1",
+		PageSize:    limit,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Result struct {
-			Data []map[string]any `json:"data"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var trades []BlockTrade
-	for _, d := range raw.Result.Data {
+	for _, d := range data {
 		trades = append(trades, BlockTrade{
 			Date:    ToStr(d["TRADE_DATE"]),
 			Code:    ToStr(d["SECURITY_CODE"]),
@@ -405,26 +360,19 @@ func GetLockupExpiry(limit int) ([]LockupExpiry, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
-	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=FREE_DATE,CURRENT_FREE_SHARES&sortTypes=1,1&pageSize=%d&pageNumber=1&reportName=RPT_LIFT_STAGE&columns=FREE_DATE,SECURITY_CODE,SECURITY_NAME_ABBR,CURRENT_FREE_SHARES,LIFT_MARKET_CAP,FREE_RATIO,FREE_SHARES_TYPE",
-		limit,
-	)
-	body, err := DoGet(u)
+	data, err := DatacenterGet(DatacenterQuery{
+		ReportName:  "RPT_LIFT_STAGE",
+		Columns:     "FREE_DATE,SECURITY_CODE,SECURITY_NAME_ABBR,CURRENT_FREE_SHARES,LIFT_MARKET_CAP,FREE_RATIO,FREE_SHARES_TYPE",
+		SortColumns: "FREE_DATE,CURRENT_FREE_SHARES",
+		SortTypes:   "1,1",
+		PageSize:    limit,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Result struct {
-			Data []map[string]any `json:"data"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var items []LockupExpiry
-	for _, d := range raw.Result.Data {
+	for _, d := range data {
 		items = append(items, LockupExpiry{
 			Date:         ToStr(d["FREE_DATE"]),
 			Code:         ToStr(d["SECURITY_CODE"]),

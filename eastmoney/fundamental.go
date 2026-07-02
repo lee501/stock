@@ -25,26 +25,14 @@ type Financial struct {
 }
 
 func GetFinancial(code string) (*Financial, error) {
-	u := fmt.Sprintf(
-		"https://push2.eastmoney.com/api/qt/stock/get?secid=%s&fields=f57,f58,f173,f183,f184,f185,f186,f187,f188,f190,f191,f192,f198,f199",
-		ToSecID(code),
-	)
-	body, err := DoGet(u)
+	m, err := Push2StockGet("stock/get", ToSecID(code),
+		"f57,f58,f173,f183,f184,f185,f186,f187,f188,f190,f191,f192,f198,f199")
 	if err != nil {
 		return nil, err
 	}
-
-	var raw struct {
-		Data map[string]json.RawMessage `json:"data"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-	if raw.Data == nil {
+	if m == nil {
 		return nil, fmt.Errorf("no financial data for %s", code)
 	}
-
-	m := raw.Data
 	return &Financial{
 		Code:         GetStr(m, "f57"),
 		Name:         GetStr(m, "f58"),
@@ -76,27 +64,20 @@ type TopHolder struct {
 }
 
 func GetTopHolders(code string) ([]TopHolder, error) {
-	filter := fmt.Sprintf(`(SECURITY_CODE="%s")`, code)
-	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=UPDATE_DATE,HOLDER_RANK&sortTypes=-1,1&pageSize=10&pageNumber=1&reportName=RPT_F10_EH_FREEHOLDERS&columns=ALL&source=WEB&client=WEB&filter=%s",
-		url.QueryEscape(filter),
-	)
-	body, err := DoGet(u)
+	data, err := DatacenterGet(DatacenterQuery{
+		ReportName:  "RPT_F10_EH_FREEHOLDERS",
+		SortColumns: "UPDATE_DATE,HOLDER_RANK",
+		SortTypes:   "-1,1",
+		PageSize:    10,
+		Filter:      fmt.Sprintf(`(SECURITY_CODE="%s")`, code),
+		Extra:       "source=WEB&client=WEB",
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Result struct {
-			Data []map[string]any `json:"data"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var holders []TopHolder
-	for _, d := range raw.Result.Data {
+	for _, d := range data {
 		holders = append(holders, TopHolder{
 			Rank:        int(ToFloat(d["HOLDER_RANK"])),
 			Name:        ToStr(d["HOLDER_NAME"]),
@@ -130,27 +111,19 @@ func GetDividendHistory(code string, limit int) ([]Dividend, error) {
 	if limit <= 0 || limit > 20 {
 		limit = 10
 	}
-	filter := fmt.Sprintf(`(SECURITY_CODE="%s")`, code)
-	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=EX_DIVIDEND_DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPT_SHAREBONUS_DET&columns=ALL&filter=%s",
-		limit, url.QueryEscape(filter),
-	)
-	body, err := DoGet(u)
+	data, err := DatacenterGet(DatacenterQuery{
+		ReportName:  "RPT_SHAREBONUS_DET",
+		SortColumns: "EX_DIVIDEND_DATE",
+		SortTypes:   "-1",
+		PageSize:    limit,
+		Filter:      fmt.Sprintf(`(SECURITY_CODE="%s")`, code),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var raw struct {
-		Result struct {
-			Data []map[string]any `json:"data"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
 	var divs []Dividend
-	for _, d := range raw.Result.Data {
+	for _, d := range data {
 		divs = append(divs, Dividend{
 			ReportDate: ToStr(d["REPORT_DATE"]),
 			Plan:       ToStr(d["ASSIGN_DETAIL"]),
@@ -184,10 +157,8 @@ func GetAnalystRatings(code string, limit int) ([]AnalystRating, error) {
 	if limit <= 0 || limit > 30 {
 		limit = 10
 	}
-	u := fmt.Sprintf(
-		"https://reportapi.eastmoney.com/report/list?industryCode=*&pageNo=1&pageSize=%d&fields=&qType=0&orgCode=&ratingChange=&beginTime=&endTime=&author=&secCode=%s",
-		limit, url.QueryEscape(code),
-	)
+	u := fmt.Sprintf("%s?industryCode=*&pageNo=1&pageSize=%d&fields=&qType=0&orgCode=&ratingChange=&beginTime=&endTime=&author=&secCode=%s",
+		baseReport, limit, url.QueryEscape(code))
 	body, err := DoGet(u)
 	if err != nil {
 		return nil, err

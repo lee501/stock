@@ -5,11 +5,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
 
 var client = &http.Client{Timeout: 10 * time.Second}
+
+const (
+	baseSearch   = "https://searchapi.eastmoney.com/api/suggest/get"
+	baseNews     = "https://search-api-web.eastmoney.com/search/jsonp"
+	baseReport   = "https://reportapi.eastmoney.com/report/list"
+	basePush2Ex  = "https://push2ex.eastmoney.com"
+)
 
 // DoGet 发起带 Referer 的 GET 请求，对空响应自动重试
 func DoGet(u string) ([]byte, error) {
@@ -111,4 +119,149 @@ func ParseFloat(s string) float64 {
 	var f float64
 	fmt.Sscanf(s, "%f", &f)
 	return f
+}
+
+// ── push2 单股查询 (secid+fields → {data:{...}}) ──
+
+func Push2StockGet(path, secid, fields string) (map[string]json.RawMessage, error) {
+	u := fmt.Sprintf("https://push2.eastmoney.com/api/qt/%s?secid=%s&fields=%s", path, secid, fields)
+	body, err := DoGet(u)
+	if err != nil {
+		return nil, err
+	}
+	var raw struct {
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, err
+	}
+	return raw.Data, nil
+}
+
+// ── push2 diff 查询 (secids → {data:{diff:[...]}}) ──
+
+func Push2DiffGet(path, params, fields string) ([]map[string]json.RawMessage, error) {
+	u := fmt.Sprintf("https://push2.eastmoney.com/api/qt/%s?%s&fields=%s", path, params, fields)
+	body, err := DoGet(u)
+	if err != nil {
+		return nil, err
+	}
+	var raw struct {
+		Data struct {
+			Diff []map[string]json.RawMessage `json:"diff"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, err
+	}
+	return raw.Data.Diff, nil
+}
+
+// ── push2his K线查询 (klines 逗号分隔) ──
+
+type Push2HisQuery struct {
+	Path   string
+	SecID  string
+	Params string
+}
+
+func Push2HisGet(q Push2HisQuery) ([]string, error) {
+	u := fmt.Sprintf("https://push2his.eastmoney.com/api/qt/%s?secid=%s&%s", q.Path, q.SecID, q.Params)
+	body, err := DoGet(u)
+	if err != nil {
+		return nil, err
+	}
+	var raw struct {
+		Data struct {
+			Klines []string `json:"klines"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, err
+	}
+	return raw.Data.Klines, nil
+}
+
+// ── datacenter-web 通用查询 ──
+
+type DatacenterQuery struct {
+	ReportName  string
+	Columns     string
+	SortColumns string
+	SortTypes   string
+	PageSize    int
+	Filter      string
+	Extra       string
+}
+
+func DatacenterGet(q DatacenterQuery) ([]map[string]any, error) {
+	cols := q.Columns
+	if cols == "" {
+		cols = "ALL"
+	}
+	u := fmt.Sprintf(
+		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=%s&sortTypes=%s&pageSize=%d&pageNumber=1&reportName=%s&columns=%s",
+		url.QueryEscape(q.SortColumns),
+		url.QueryEscape(q.SortTypes),
+		q.PageSize,
+		url.QueryEscape(q.ReportName),
+		url.QueryEscape(cols),
+	)
+	if q.Filter != "" {
+		u += "&filter=" + url.QueryEscape(q.Filter)
+	}
+	if q.Extra != "" {
+		u += "&" + q.Extra
+	}
+	body, err := DoGet(u)
+	if err != nil {
+		return nil, err
+	}
+	var raw struct {
+		Result struct {
+			Data []map[string]any `json:"data"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, err
+	}
+	return raw.Result.Data, nil
+}
+
+// ── push2 clist 通用查询 ──
+
+type ClistQuery struct {
+	FS        string
+	Fields    string
+	Limit     int
+	SortField string
+	SortOrder string // "1" desc, "0" asc
+}
+
+func ClistGet(q ClistQuery) ([]map[string]json.RawMessage, error) {
+	sortField := q.SortField
+	if sortField == "" {
+		sortField = "f3"
+	}
+	sortOrder := q.SortOrder
+	if sortOrder == "" {
+		sortOrder = "1"
+	}
+	u := fmt.Sprintf(
+		"https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=%d&po=%s&np=1&fltt=2&invt=2&fid=%s&fs=%s&fields=%s",
+		q.Limit, sortOrder, sortField, url.QueryEscape(q.FS), url.QueryEscape(q.Fields),
+	)
+	body, err := DoGet(u)
+	if err != nil {
+		return nil, err
+	}
+	var raw struct {
+		Data struct {
+			Diff []map[string]json.RawMessage `json:"diff"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, err
+	}
+	return raw.Data.Diff, nil
 }
