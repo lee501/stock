@@ -7,9 +7,9 @@
 ### 构建
 
 ```bash
-cd stock-mcp
+cd stock
 go mod tidy
-go build -o stock-mcp .
+go build -o stock .
 ```
 
 ### 配置 Claude Desktop
@@ -24,7 +24,7 @@ go build -o stock-mcp .
 {
   "mcpServers": {
     "a-stock": {
-      "command": "/absolute/path/to/stock-mcp"
+      "command": "/absolute/path/to/stock"
     }
   }
 }
@@ -35,24 +35,25 @@ go build -o stock-mcp .
 ### 配置 Claude Code
 
 ```bash
-claude mcp add a-stock /absolute/path/to/stock-mcp
+claude mcp add a-stock /absolute/path/to/stock
 ```
 
 ## 项目结构
 
 ```
-stock-mcp/
+stock/
 ├── go.mod
 ├── README.md
 ├── main.go                    # 入口: server 初始化 + tool 注册
 ├── handlers.go                # 所有 handler 函数 + 参数解析辅助
 └── eastmoney/                 # 东方财富 API 客户端(按领域拆分)
-    ├── client.go              # HTTP client + 通用解析辅助(ToSecID/GetFloat/ToStr...)
+    ├── client.go              # HTTP client + 6个通用查询函数 + URL常量 + 解析辅助
     ├── quote.go               # 行情: 搜索、实时报价、K线、指数
     ├── flow.go                # 资金: 个股资金流、北向资金、融资融券
     ├── fundamental.go         # 基本面: 财务指标、十大股东、分红、研报
     ├── market.go              # 市场: 板块、排行、涨停跌停、龙虎榜、大宗、解禁
-    └── news.go                # 资讯: 个股新闻
+    ├── news.go                # 资讯: 个股新闻
+    └── eastmoney_test.go      # 全量集成测试(22个Tool)
 ```
 
 **设计原则：**
@@ -61,6 +62,7 @@ stock-mcp/
 - `handlers.go` 负责 MCP 协议层的参数解析和结果序列化，调用 `eastmoney` 包
 - `eastmoney/` 是纯粹的 API 客户端，不依赖 MCP，可独立复用
 - `eastmoney/` 内部按领域拆文件，每个文件职责单一
+- API 的 URL、参数构建、响应解析全部集中在 `client.go`，业务函数只声明查询参数和字段映射
 
 ## Tool 一览
 
@@ -343,17 +345,17 @@ stock-mcp/
 
 ## 数据源
 
-所有数据来自东方财富公开行情接口，免费无需注册:
+所有数据来自东方财富公开行情接口，免费无需注册。域名和基础 URL 统一定义在 `client.go`：
 
-| 域名 | 用途 |
-|------|------|
-| `push2.eastmoney.com` | 实时行情、资金流、板块、排行、财务指标 |
-| `push2his.eastmoney.com` | 历史K线、历史资金流 |
-| `push2ex.eastmoney.com` | 涨停/跌停股池 |
-| `searchapi.eastmoney.com` | 股票搜索 |
-| `datacenter-web.eastmoney.com` | 数据中心(龙虎榜/融资/大宗/解禁/北向持仓/股东/分红) |
-| `reportapi.eastmoney.com` | 机构评级/研报 |
-| `search-api-web.eastmoney.com` | 新闻搜索 |
+| 域名 | 用途 | 对应查询函数 |
+|------|------|-------------|
+| `push2.eastmoney.com` | 实时行情、资金流、板块、排行、财务指标 | `Push2StockGet` / `ClistGet` / `Push2DiffGet` |
+| `push2his.eastmoney.com` | 历史K线、历史资金流 | `Push2HisGet` |
+| `push2ex.eastmoney.com` | 涨停/跌停股池 | `basePush2Ex` 常量 |
+| `searchapi.eastmoney.com` | 股票搜索 | `baseSearch` 常量 |
+| `datacenter-web.eastmoney.com` | 数据中心(龙虎榜/融资/大宗/解禁/北向持仓/股东/分红) | `DatacenterGet` |
+| `reportapi.eastmoney.com` | 机构评级/研报 | `baseReport` 常量 |
+| `search-api-web.eastmoney.com` | 新闻搜索 | `baseNews` 常量 |
 
 **已知限制：**
 
@@ -366,9 +368,31 @@ stock-mcp/
 
 **添加新 Tool 三步走：**
 
-1. `eastmoney/` 下对应文件新增 API 函数（结构体定义 + HTTP 请求 + JSON 解析）
+1. `eastmoney/` 下对应文件新增 API 函数（结构体定义 + 调用通用查询 + 字段映射）
 2. `handlers.go` 新增 handler 函数（参数解析 → 调 API → 返回 JSON）
 3. `main.go` 的 `registerTools()` 新增 `s.AddTool(...)` 注册
+
+**`client.go` 通用查询函数：**
+
+| 函数 | 用途 | 适用接口 |
+|------|------|---------|
+| `DatacenterGet` | datacenter-web 报表查询 | 龙虎榜、大宗、解禁、北向持仓、融资融券、股东、分红等 |
+| `ClistGet` | push2 列表排行查询 | 板块排行、成分股、涨跌排行 |
+| `Push2StockGet` | push2 单股数据查询 | 实时行情、财务指标、资金流向 |
+| `Push2DiffGet` | push2 多标的 diff 查询 | 指数行情 |
+| `Push2HisGet` | push2his K线类查询 | K线、历史资金流向 |
+
+添加新的 datacenter 类接口只需声明 `DatacenterQuery` 即可，无需手写 URL：
+
+```go
+data, err := DatacenterGet(DatacenterQuery{
+    ReportName:  "RPT_SOME_REPORT",
+    SortColumns: "TRADE_DATE",
+    SortTypes:   "-1",
+    PageSize:    limit,
+    Filter:      fmt.Sprintf(`(SECURITY_CODE="%s")`, code),
+})
+```
 
 **可扩展方向：**
 
