@@ -125,12 +125,190 @@ stock-mcp/
 
 ## 使用示例
 
-对 Claude 说自然语言，它会自动组合调用合适的 Tool：
+对 Claude 说自然语言，它会自动组合调用合适的 Tool。
+
+### 查询类
+
+**搜索股票**
+```
+"帮我找一下和锂电池相关的股票"
+→ search_stock("锂电池")
+```
+
+**实时行情**
+```
+"茅台现在什么价？"
+→ search_stock("茅台") → get_quote("600519")
+返回: 价格、涨跌幅、成交量、换手率、PE、PB、总市值、流通市值
+```
+
+**K线走势**
+```
+"看看比亚迪最近一个月的日K"
+→ get_kline("002594", period="daily", limit=22)
+
+"宁德时代的周K走势"
+→ get_kline("300750", period="weekly", limit=20)
+
+"贵州茅台近一年月K"
+→ get_kline("600519", period="monthly", limit=12)
+```
+
+**大盘指数**
+```
+"今天大盘怎么样"
+→ get_index()
+返回: 上证指数、深证成指、创业板指、科创50、沪深300、中证500，含涨跌家数
+```
+
+### 资金流向
+
+**个股资金流**
+```
+"宁德时代今天资金流向怎么样"
+→ get_money_flow("300750")
+返回: 主力/超大单/大单/中单/小单的流入流出及净额
+
+"平安银行最近10天的资金流向趋势"
+→ get_money_flow_history("000001", limit=10)
+```
+
+**北向资金**
+```
+"北向资金最近在买什么"
+→ get_north_flow(limit=10) → get_north_holdings(market="sh") → get_north_holdings(market="sz")
+
+"北向资金最近5天净流入多少"
+→ get_north_flow(limit=5)
+返回: 沪股通/深股通每日净买入、累计净买入
+```
+
+**融资融券**
+```
+"最近杠杆资金情绪怎么样"
+→ get_margin_data(limit=10)
+返回: 两市融资融券余额汇总趋势
+
+"看看平安银行的融资融券数据"
+→ get_stock_margin("000001", limit=10)
+返回: 融资买入额/余额、融券卖出量/余额
+```
+
+### 基本面分析
+
+**财务指标**
+```
+"比亚迪的财务状况怎么样"
+→ get_financial("002594")
+返回: ROE、毛利率、净利率、营收同比、净利润同比、资产负债率、EPS
+```
+
+**股东分析**
+```
+"宁德时代的十大流通股东是谁"
+→ get_top_holders("300750")
+返回: 股东名称、持股数量、占比、增减变动、股东性质(基金/个人/QFII)
+```
+
+**分红历史**
+```
+"茅台历年分红情况"
+→ get_dividend_history("600519", limit=10)
+返回: 分配方案、除权除息日、股息率
+```
+
+**机构评级**
+```
+"券商怎么看宁德时代"
+→ get_analyst_ratings("300750", limit=10)
+返回: 券商、分析师、评级(买入/增持/中性)、目标价、研报标题
+```
+
+### 板块分析
+
+**板块排行**
+```
+"今天哪些行业板块涨得好"
+→ get_sectors(type="industry", limit=20)
+
+"最近有什么热门概念"
+→ get_sectors(type="concept", limit=20)
+返回: 板块名称、涨跌幅、主力资金净流入、领涨股
+```
+
+**板块成分股**
+```
+"固态电池板块有哪些值得关注的票"
+→ get_sectors(type="concept") → 找到板块代码 → get_sector_stocks("BK0477", limit=20)
+返回: 成分股列表，含价格、涨跌幅、成交额、主力资金
+```
+
+### 排行与异动
+
+**涨跌排行**
+```
+"今天涨幅最大的股票"
+→ get_ranking(type="top", limit=20)
+
+"今天跌幅最大的股票"
+→ get_ranking(type="bottom", limit=20)
+
+"今天成交额最大的股票"
+→ get_ranking(type="amount", limit=20)
+
+"今天换手率最高的股票"
+→ get_ranking(type="turnover", limit=20)
+```
+
+**涨停跌停**
+```
+"今天有哪些涨停板"
+→ get_limit_stocks(type="up", limit=30)
+返回: 涨停股列表，含连板天数、封板时间、开板次数、所属行业
+
+"今天有哪些跌停"
+→ get_limit_stocks(type="down", limit=30)
+```
+
+**龙虎榜**
+```
+"今天龙虎榜有什么"
+→ get_dragon_tiger(limit=20)
+返回: 上榜股票、净买入、买卖总额、上榜原因、换手率
+```
+
+### 风控排查
+
+**大宗交易**
+```
+"最近有哪些大宗交易"
+→ get_block_trades(limit=20)
+返回: 成交价、折溢价率、成交量、买卖方营业部
+```
+
+**限售解禁**
+```
+"最近有哪些股票要解禁"
+→ get_lockup_expiry(limit=20)
+返回: 解禁日期、解禁数量、占总股本比例、限售类型
+```
+
+### 资讯
+
+**个股新闻**
+```
+"平安银行最近有什么新闻"
+→ get_stock_news("000001", limit=10)
+返回: 标题、来源、日期、摘要
+```
+
+### 综合场景
 
 **个股全面分析**
 ```
 "帮我全面分析一下宁德时代"
-→ get_quote → get_financial → get_money_flow → get_kline → get_top_holders → get_analyst_ratings → get_stock_news
+→ search_stock → get_quote → get_financial → get_money_flow → get_kline
+→ get_top_holders → get_analyst_ratings → get_stock_news
 ```
 
 **大盘情绪判断**
@@ -151,18 +329,6 @@ stock-mcp/
 → get_lockup_expiry → get_stock_margin → get_top_holders → get_block_trades → get_dividend_history
 ```
 
-**北向资金追踪**
-```
-"北向资金最近在买什么"
-→ get_north_flow → get_north_holdings(sh) → get_north_holdings(sz)
-```
-
-**板块挖掘**
-```
-"固态电池板块有哪些值得关注的票"
-→ get_sectors(concept) → get_sector_stocks → 逐一 get_quote + get_financial
-```
-
 ## 参数说明
 
 | 参数 | 格式 | 说明 |
@@ -181,10 +347,12 @@ stock-mcp/
 
 | 域名 | 用途 |
 |------|------|
-| `push2.eastmoney.com` | 实时行情、资金流、板块、排行 |
+| `push2.eastmoney.com` | 实时行情、资金流、板块、排行、财务指标 |
 | `push2his.eastmoney.com` | 历史K线、历史资金流 |
+| `push2ex.eastmoney.com` | 涨停/跌停股池 |
 | `searchapi.eastmoney.com` | 股票搜索 |
-| `datacenter-web.eastmoney.com` | 数据中心(龙虎榜/融资/大宗/解禁/研报/股东/分红) |
+| `datacenter-web.eastmoney.com` | 数据中心(龙虎榜/融资/大宗/解禁/北向持仓/股东/分红) |
+| `reportapi.eastmoney.com` | 机构评级/研报 |
 | `search-api-web.eastmoney.com` | 新闻搜索 |
 
 **已知限制：**

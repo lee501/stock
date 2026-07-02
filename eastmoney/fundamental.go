@@ -78,7 +78,7 @@ type TopHolder struct {
 func GetTopHolders(code string) ([]TopHolder, error) {
 	filter := fmt.Sprintf(`(SECURITY_CODE="%s")`, code)
 	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=RANK&sortTypes=1&pageSize=10&pageNumber=1&reportName=RPT_F10_EH_FREEHOLDERS&columns=ALL&filter=%s",
+		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=UPDATE_DATE,HOLDER_RANK&sortTypes=-1,1&pageSize=10&pageNumber=1&reportName=RPT_F10_EH_FREEHOLDERS&columns=ALL&source=WEB&client=WEB&filter=%s",
 		url.QueryEscape(filter),
 	)
 	body, err := DoGet(u)
@@ -98,14 +98,14 @@ func GetTopHolders(code string) ([]TopHolder, error) {
 	var holders []TopHolder
 	for _, d := range raw.Result.Data {
 		holders = append(holders, TopHolder{
-			Rank:        int(ToFloat(d["RANK"])),
-			Name:        ToStr(d["FREE_HOLDNUM_NAME"]),
-			HoldCount:   ToFloat(d["FREE_HOLDNUM"]),
-			HoldRatio:   ToFloat(d["FREE_RATIO_QSZ"]),
-			Change:      ToStr(d["IS_HOLDORG"]),
-			ChangeCount: ToFloat(d["HOLD_NUM_CHANGE"]),
+			Rank:        int(ToFloat(d["HOLDER_RANK"])),
+			Name:        ToStr(d["HOLDER_NAME"]),
+			HoldCount:   ToFloat(d["HOLD_NUM"]),
+			HoldRatio:   ToFloat(d["FREE_HOLDNUM_RATIO"]),
+			Change:      ToStr(d["HOLD_CHANGE"]),
+			ChangeCount: ToFloat(d["HOLD_RATIO_CHANGE"]),
 			HolderType:  ToStr(d["HOLDER_TYPE"]),
-			ReportDate:  ToStr(d["END_DATE"]),
+			ReportDate:  ToStr(d["REPORT_DATE_NAME"]),
 		})
 	}
 	return holders, nil
@@ -184,10 +184,9 @@ func GetAnalystRatings(code string, limit int) ([]AnalystRating, error) {
 	if limit <= 0 || limit > 30 {
 		limit = 10
 	}
-	filter := fmt.Sprintf(`(SECURITY_CODE="%s")`, code)
 	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=REPORT_DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPT_RATINGCHANGE_DET&columns=ALL&filter=%s",
-		limit, url.QueryEscape(filter),
+		"https://reportapi.eastmoney.com/report/list?industryCode=*&pageNo=1&pageSize=%d&fields=&qType=0&orgCode=&ratingChange=&beginTime=&endTime=&author=&secCode=%s",
+		limit, url.QueryEscape(code),
 	)
 	body, err := DoGet(u)
 	if err != nil {
@@ -195,25 +194,23 @@ func GetAnalystRatings(code string, limit int) ([]AnalystRating, error) {
 	}
 
 	var raw struct {
-		Result struct {
-			Data []map[string]any `json:"data"`
-		} `json:"result"`
+		Data []map[string]any `json:"data"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, err
 	}
 
 	var ratings []AnalystRating
-	for _, d := range raw.Result.Data {
+	for _, d := range raw.Data {
 		ratings = append(ratings, AnalystRating{
-			Date:        ToStr(d["REPORT_DATE"]),
-			Code:        ToStr(d["SECURITY_CODE"]),
-			Name:        ToStr(d["SECURITY_NAME_ABBR"]),
-			Broker:      ToStr(d["ORG_NAME"]),
-			Analyst:     ToStr(d["RESEARCHER"]),
-			Rating:      ToStr(d["RATING_NAME"]),
-			TargetPrice: ToFloat(d["AIM_PRICE"]),
-			Title:       ToStr(d["TITLE"]),
+			Date:        ToStr(d["publishDate"]),
+			Code:        ToStr(d["stockCode"]),
+			Name:        ToStr(d["stockName"]),
+			Broker:      ToStr(d["orgSName"]),
+			Analyst:     ToStr(d["researcher"]),
+			Rating:      ToStr(d["emRatingName"]),
+			TargetPrice: ToFloat(d["indvAimPriceT"]),
+			Title:       ToStr(d["title"]),
 		})
 	}
 	return ratings, nil

@@ -181,19 +181,19 @@ type NorthHolding struct {
 	HoldShares float64 `json:"hold_shares"`
 	HoldRatio  float64 `json:"hold_ratio"`
 	HoldValue  float64 `json:"hold_value"`
-	DayChange  float64 `json:"day_change"`
+	ChangePct  float64 `json:"change_pct"`
 }
 
 func GetNorthHoldings(market string, limit int) ([]NorthHolding, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
-	filter := `(MARKET_CODE="001")`
+	filter := `(MUTUAL_TYPE="001")`
 	if market == "sz" {
-		filter = `(MARKET_CODE="003")`
+		filter = `(MUTUAL_TYPE="003")`
 	}
 	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=ADD_SHARES_AMP&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPT_MUTUAL_STOCK_NORTHSTA&columns=ALL&filter=%s",
+		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=HOLD_MARKET_CAP&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPT_MUTUAL_HOLDSTOCKNORTH_STA&columns=ALL&source=WEB&client=WEB&filter=%s",
 		limit, url.QueryEscape(filter),
 	)
 	body, err := DoGet(u)
@@ -216,9 +216,9 @@ func GetNorthHoldings(market string, limit int) ([]NorthHolding, error) {
 			Code:       ToStr(d["SECURITY_CODE"]),
 			Name:       ToStr(d["SECURITY_NAME"]),
 			HoldShares: ToFloat(d["HOLD_SHARES"]),
-			HoldRatio:  ToFloat(d["FREECAP_RATIO"]),
+			HoldRatio:  ToFloat(d["FREE_SHARES_RATIO"]),
 			HoldValue:  ToFloat(d["HOLD_MARKET_CAP"]),
-			DayChange:  ToFloat(d["ADD_SHARES_AMP"]),
+			ChangePct:  ToFloat(d["CHANGE_RATE"]),
 		})
 	}
 	return holdings, nil
@@ -242,7 +242,7 @@ func GetMarginData(limit int) ([]MarginData, error) {
 		limit = 10
 	}
 	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=DIM_DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPTA_MUTUAL_MARKET_STA&columns=DIM_DATE,FIN_BUY_AMT,FIN_BALANCE,SEC_SELL_AMT,SEC_BALANCE,FIN_SEC_BALANCE",
+		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=STATISTICS_DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPTA_WEB_MARGIN_DAILYTRADE&columns=STATISTICS_DATE,FIN_BUY_AMT,FIN_BALANCE,LOAN_SELL_AMT,LOAN_BALANCE,MARGIN_BALANCE",
 		limit,
 	)
 	body, err := DoGet(u)
@@ -262,12 +262,12 @@ func GetMarginData(limit int) ([]MarginData, error) {
 	var items []MarginData
 	for _, d := range raw.Result.Data {
 		items = append(items, MarginData{
-			Date:       ToStr(d["DIM_DATE"]),
+			Date:       ToStr(d["STATISTICS_DATE"]),
 			FinBuy:     ToFloat(d["FIN_BUY_AMT"]),
 			FinBalance: ToFloat(d["FIN_BALANCE"]),
-			SecSell:    ToFloat(d["SEC_SELL_AMT"]),
-			SecBalance: ToFloat(d["SEC_BALANCE"]),
-			Total:      ToFloat(d["FIN_SEC_BALANCE"]),
+			SecSell:    ToFloat(d["LOAN_SELL_AMT"]),
+			SecBalance: ToFloat(d["LOAN_BALANCE"]),
+			Total:      ToFloat(d["MARGIN_BALANCE"]),
 		})
 	}
 	return items, nil
@@ -293,7 +293,7 @@ func GetStockMargin(code string, limit int) ([]StockMargin, error) {
 	}
 	filter := fmt.Sprintf(`(SCODE="%s")`, code)
 	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=DIM_DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPTA_WEB_RZRQ_GGMX&columns=ALL&filter=%s",
+		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPTA_WEB_RZRQ_GGMX&columns=ALL&filter=%s",
 		limit, url.QueryEscape(filter),
 	)
 	body, err := DoGet(u)
@@ -313,9 +313,9 @@ func GetStockMargin(code string, limit int) ([]StockMargin, error) {
 	var items []StockMargin
 	for _, d := range raw.Result.Data {
 		items = append(items, StockMargin{
-			Date:       ToStr(d["DIM_DATE"]),
+			Date:       ToStr(d["DATE"]),
 			Code:       ToStr(d["SCODE"]),
-			Name:       ToStr(d["SNAME"]),
+			Name:       ToStr(d["SECNAME"]),
 			FinBuy:     ToFloat(d["RZJME"]),
 			FinBalance: ToFloat(d["RZYE"]),
 			SecSell:    ToFloat(d["RQMCL"]),

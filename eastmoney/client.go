@@ -11,10 +11,22 @@ import (
 
 var client = &http.Client{Timeout: 10 * time.Second}
 
-// DoGet 发起带 Referer 的 GET 请求
+// DoGet 发起带 Referer 的 GET 请求，对空响应自动重试
 func DoGet(u string) ([]byte, error) {
+	delays := []time.Duration{time.Second, 2 * time.Second}
+	for _, d := range delays {
+		body, err := doGetOnce(u)
+		if err == nil && len(body) > 0 {
+			return body, nil
+		}
+		time.Sleep(d)
+	}
+	return doGetOnce(u)
+}
+
+func doGetOnce(u string) ([]byte, error) {
 	req, _ := http.NewRequest("GET", u, nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	req.Header.Set("Referer", "https://quote.eastmoney.com/")
 	resp, err := client.Do(req)
 	if err != nil {

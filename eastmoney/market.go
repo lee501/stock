@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"time"
 )
 
 // ════════════════════════════════════════
@@ -200,17 +201,21 @@ type LimitStock struct {
 }
 
 func GetLimitStocks(limitType string, limit int) ([]LimitStock, error) {
-	if limit <= 0 || limit > 50 {
+	if limit <= 0 || limit > 200 {
 		limit = 30
 	}
-	reportName := "RPT_LIMITUP_BASICINFO"
+	date := time.Now().Format("20060102")
+
+	endpoint := "getTopicZTPool"
+	sort := "fbt:asc"
 	if limitType == "down" {
-		reportName = "RPT_LIMITDOWN_BASICINFO"
+		endpoint = "getTopicDTPool"
+		sort = "fund:asc"
 	}
 
 	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=LATEST_BOARD_TIME&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=%s&columns=ALL",
-		limit, reportName,
+		"https://push2ex.eastmoney.com/%s?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&pagesize=%d&sort=%s&date=%s",
+		endpoint, limit, sort, date,
 	)
 	body, err := DoGet(u)
 	if err != nil {
@@ -218,31 +223,54 @@ func GetLimitStocks(limitType string, limit int) ([]LimitStock, error) {
 	}
 
 	var raw struct {
-		Result struct {
-			Data []map[string]any `json:"data"`
-		} `json:"result"`
+		Data struct {
+			Pool []map[string]json.RawMessage `json:"pool"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, err
 	}
 
 	var stocks []LimitStock
-	for _, d := range raw.Result.Data {
+	for _, m := range raw.Data.Pool {
+		days := int(GetFloat(m, "lbc"))
+		if limitType == "down" {
+			days = int(GetFloat(m, "days"))
+		}
+		var zttj struct {
+			Days int `json:"days"`
+			Ct   int `json:"ct"`
+		}
+		if v, ok := m["zttj"]; ok {
+			json.Unmarshal(v, &zttj)
+			if zttj.Days > 0 {
+				days = zttj.Days
+			}
+		}
+
 		stocks = append(stocks, LimitStock{
-			Code:       ToStr(d["SECURITY_CODE"]),
-			Name:       ToStr(d["SECURITY_NAME_ABBR"]),
-			Price:      ToFloat(d["LATEST"]),
-			ChangePct:  ToFloat(d["CHANGE_RATE"]),
-			TurnOver:   ToFloat(d["TURNOVERRATE"]),
-			Amount:     ToFloat(d["DEAL_AMOUNT"]),
-			LimitTimes: int(ToFloat(d["CONTINUOUS_DAYS"])),
-			FirstTime:  ToStr(d["FIRST_BOARD_TIME"]),
-			LastTime:   ToStr(d["LATEST_BOARD_TIME"]),
-			OpenCount:  int(ToFloat(d["OPEN_TIMES"])),
-			Theme:      ToStr(d["REASON_TYPE"]),
+			Code:       GetStr(m, "c"),
+			Name:       GetStr(m, "n"),
+			Price:      GetFloat(m, "p") / 1000,
+			ChangePct:  GetFloat(m, "zdp"),
+			TurnOver:   GetFloat(m, "hs"),
+			Amount:     GetFloat(m, "amount"),
+			LimitTimes: days,
+			FirstTime:  fmtTime(GetFloat(m, "fbt")),
+			LastTime:   fmtTime(GetFloat(m, "lbt")),
+			OpenCount:  int(GetFloat(m, "zbc")),
+			Theme:      GetStr(m, "hybk"),
 		})
 	}
 	return stocks, nil
+}
+
+func fmtTime(v float64) string {
+	if v <= 0 {
+		return ""
+	}
+	t := int(v)
+	return fmt.Sprintf("%02d:%02d:%02d", t/10000, (t/100)%100, t%100)
 }
 
 // ════════════════════════════════════════
@@ -268,7 +296,7 @@ func GetDragonTiger(limit int) ([]DragonTiger, error) {
 		limit = 20
 	}
 	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=SECURITY_CODE&sortTypes=1&pageSize=%d&pageNumber=1&reportName=RPT_DAILYBILLBOARD_DETAILSNEW&columns=ALL&filter=",
+		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=TRADE_DATE,SECURITY_CODE&sortTypes=-1,1&pageSize=%d&pageNumber=1&reportName=RPT_DAILYBILLBOARD_DETAILSNEW&columns=ALL&filter=",
 		limit,
 	)
 	body, err := DoGet(u)
@@ -325,7 +353,7 @@ func GetBlockTrades(limit int) ([]BlockTrade, error) {
 		limit = 20
 	}
 	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=TRADE_DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPT_BLOCKTRADE_DETAILSINFO&columns=TRADE_DATE,SECURITY_CODE,SECURITY_NAME_ABBR,DEAL_PRICE,DEAL_VOL,DEAL_AMT,PREMIUM_RATIO,BUYER_NAME,SELLER_NAME",
+		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=TRADE_DATE&sortTypes=-1&pageSize=%d&pageNumber=1&reportName=RPT_DATA_BLOCKTRADE&columns=TRADE_DATE,SECURITY_CODE,SECURITY_NAME_ABBR,DEAL_PRICE,DEAL_VOLUME,DEAL_AMT,PREMIUM_RATIO,BUYER_NAME,SELLER_NAME",
 		limit,
 	)
 	body, err := DoGet(u)
@@ -349,7 +377,7 @@ func GetBlockTrades(limit int) ([]BlockTrade, error) {
 			Code:    ToStr(d["SECURITY_CODE"]),
 			Name:    ToStr(d["SECURITY_NAME_ABBR"]),
 			Price:   ToFloat(d["DEAL_PRICE"]),
-			Volume:  ToFloat(d["DEAL_VOL"]),
+			Volume:  ToFloat(d["DEAL_VOLUME"]),
 			Amount:  ToFloat(d["DEAL_AMT"]),
 			Premium: ToFloat(d["PREMIUM_RATIO"]),
 			Buyer:   ToStr(d["BUYER_NAME"]),
@@ -378,7 +406,7 @@ func GetLockupExpiry(limit int) ([]LockupExpiry, error) {
 		limit = 20
 	}
 	u := fmt.Sprintf(
-		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=FREE_DATE&sortTypes=1&pageSize=%d&pageNumber=1&reportName=RPT_LIFT_STAGE&columns=FREE_DATE,SECURITY_CODE,SECURITY_NAME_ABBR,FREE_SHARES_NUM,FREE_MARKET_CAP,FREE_RATIO,LIFT_TYPE&filter=",
+		"https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=FREE_DATE,CURRENT_FREE_SHARES&sortTypes=1,1&pageSize=%d&pageNumber=1&reportName=RPT_LIFT_STAGE&columns=FREE_DATE,SECURITY_CODE,SECURITY_NAME_ABBR,CURRENT_FREE_SHARES,LIFT_MARKET_CAP,FREE_RATIO,FREE_SHARES_TYPE",
 		limit,
 	)
 	body, err := DoGet(u)
@@ -401,10 +429,10 @@ func GetLockupExpiry(limit int) ([]LockupExpiry, error) {
 			Date:         ToStr(d["FREE_DATE"]),
 			Code:         ToStr(d["SECURITY_CODE"]),
 			Name:         ToStr(d["SECURITY_NAME_ABBR"]),
-			UnlockShares: ToFloat(d["FREE_SHARES_NUM"]),
-			UnlockValue:  ToFloat(d["FREE_MARKET_CAP"]),
+			UnlockShares: ToFloat(d["CURRENT_FREE_SHARES"]),
+			UnlockValue:  ToFloat(d["LIFT_MARKET_CAP"]),
 			UnlockRatio:  ToFloat(d["FREE_RATIO"]),
-			LockupType:   ToStr(d["LIFT_TYPE"]),
+			LockupType:   ToStr(d["FREE_SHARES_TYPE"]),
 		})
 	}
 	return items, nil

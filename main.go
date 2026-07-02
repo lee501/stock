@@ -65,7 +65,7 @@ func registerTools(s *server.MCPServer) {
 	), handleNorthFlow)
 
 	s.AddTool(mcp.NewTool("get_north_holdings",
-		mcp.WithDescription("北向资金个股持仓排行,按日增持幅度排序"),
+		mcp.WithDescription("北向资金个股持仓排行,按持仓市值排序"),
 		mcp.WithString("market", mcp.Description("sh(沪股通,默认)/sz(深股通)"), mcp.Enum("sh", "sz")),
 		mcp.WithNumber("limit", mcp.Description("条数,默认20")),
 	), handleNorthHoldings)

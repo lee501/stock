@@ -1,6 +1,7 @@
 package eastmoney
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -30,8 +31,12 @@ func GetStockNews(code string, limit int) ([]StockNews, error) {
 		return nil, err
 	}
 
+	body = bytes.TrimSpace(body)
+	body = bytes.TrimPrefix(body, []byte("("))
+	body = bytes.TrimSuffix(body, []byte(")"))
+
 	var raw struct {
-		Result []struct {
+		Result struct {
 			CmsArticleWebOld []struct {
 				Title      string `json:"title"`
 				Date       string `json:"date"`
@@ -46,21 +51,19 @@ func GetStockNews(code string, limit int) ([]StockNews, error) {
 	}
 
 	var news []StockNews
-	if len(raw.Result) > 0 {
-		for _, item := range raw.Result[0].CmsArticleWebOld {
-			n := StockNews{
-				Title:  item.Title,
-				Date:   item.Date,
-				Source: item.MediaName,
-				URL:    item.ArticleURL,
-			}
-			if len(item.Content) > 200 {
-				n.Summary = item.Content[:200] + "..."
-			} else {
-				n.Summary = item.Content
-			}
-			news = append(news, n)
+	for _, item := range raw.Result.CmsArticleWebOld {
+		n := StockNews{
+			Title:  item.Title,
+			Date:   item.Date,
+			Source: item.MediaName,
+			URL:    item.ArticleURL,
 		}
+		if len(item.Content) > 200 {
+			n.Summary = item.Content[:200] + "..."
+		} else {
+			n.Summary = item.Content
+		}
+		news = append(news, n)
 	}
 	return news, nil
 }
