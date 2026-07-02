@@ -6,7 +6,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
-	em "stock-mcp/eastmoney"
+	em "stock/eastmoney"
 )
 
 // ── 基础行情 ──

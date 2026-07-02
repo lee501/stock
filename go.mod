@@ -1,4 +1,4 @@
-module stock-mcp
+module stock
 
 go 1.26
 
